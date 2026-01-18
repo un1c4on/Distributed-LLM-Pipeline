@@ -1,0 +1,17 @@
+# Model files (too large for GitHub)
+*.gguf
+*.bin
+
+# Logs
+*.log
+system_log.txt
+calistir.txt
+
+# Temporary/System files
+.DS_Store
+tmp/
+.gemini/
+
+# Build artifacts (root level)
+dist/
+build/

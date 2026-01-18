@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GssAgent Dağıtık LLM Paneli</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #1e1e1e; color: #fff; margin: 0; padding: 20px; display: flex; gap: 20px; height: 95vh; }
+        .panel { flex: 1; background: #2d2d2d; border-radius: 10px; padding: 20px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        h2 { margin-top: 0; color: #00ff9d; border-bottom: 1px solid #444; padding-bottom: 10px; }
+        
+        #logs { font-family: 'Courier New', monospace; font-size: 12px; color: #aaa; overflow-y: auto; flex: 1; white-space: pre-wrap; }
+        .log-entry { margin-bottom: 2px; }
+        .log-highlight { color: #ffeb3b; font-weight: bold; } /* RPC yazılarını sarı yap */
+
+        #chat-box { flex: 1; overflow-y: auto; margin-bottom: 10px; line-height: 1.6; font-size: 16px; }
+        #input-area { display: flex; gap: 10px; }
+        input { flex: 1; padding: 10px; border-radius: 5px; border: none; background: #444; color: white; }
+        button { padding: 10px 20px; border-radius: 5px; border: none; background: #00ff9d; color: #000; font-weight: bold; cursor: pointer; }
+        button:hover { background: #00cc7a; }
+        button:disabled { background: #555; cursor: not-allowed; }
+    </style>
+</head>
+<body>
+
+    <!-- SOL PANEL: SİSTEM LOGLARI (KANIT EKRANI) -->
+    <div class="panel">
+        <h2>🖥️ Sistem Logları (Dağıtık Mimari)</h2>
+        <div id="logs">
+            <div class="log-entry">Sistem hazır. Worker bekleniyor...</div>
+        </div>
+    </div>
+
+    <!-- SAĞ PANEL: SOHBET -->
+    <div class="panel">
+        <h2>🤖 Yapay Zeka (Stories-15M)</h2>
+        <div id="chat-box"></div>
+        <div id="input-area">
+            <input type="text" id="prompt" placeholder="Bir hikaye başlangıcı yazın (Örn: Once upon a time)..." value="Once upon a time">
+            <button onclick="startChat()" id="sendBtn">Gönder</button>
+        </div>
+    </div>
+
+    <script>
+        async function startChat() {
+            const prompt = document.getElementById('prompt').value;
+            const chatBox = document.getElementById('chat-box');
+            const logsBox = document.getElementById('logs');
+            const btn = document.getElementById('sendBtn');
+
+            chatBox.innerHTML = ""; 
+            logsBox.innerHTML = "";
+            btn.disabled = true;
+            btn.innerText = "Üretiliyor...";
+
+            try {
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt: prompt })
+                });
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n');
+
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            try {
+                                const jsonStr = line.replace('data: ', '');
+                                const data = JSON.parse(jsonStr);
+
+                                if (data.msg_type === 'log') {
+                                    // LOG KUTUSU GÜNCELLEME
+                                    const div = document.createElement('div');
+                                    div.className = 'log-entry';
+                                    div.textContent = data.content;
+                                    
+                                    // Eğer logda "RPC" veya "offloaded" varsa sarı yap (KANIT)
+                                    if (data.content.includes('RPC') || data.content.includes('offloaded')) {
+                                        div.className += ' log-highlight';
+                                    }
+                                    logsBox.appendChild(div);
+                                    logsBox.scrollTop = logsBox.scrollHeight;
+                                } else {
+                                    // SOHBET KUTUSU GÜNCELLEME
+                                    chatBox.innerHTML += data.content.replace(/\n/g, "<br>");
+                                    chatBox.scrollTop = chatBox.scrollHeight;
+                                }
+                            } catch (e) {
+                                // JSON parse hatası (boş satır vs) olursa yoksay
+                            }
+                        }
+                    }
+                }
+
+            } catch (err) {
+                logsBox.innerHTML += `<div style="color:red">Bağlantı Hatası: ${err}</div>`;
+            } finally {
+                btn.disabled = false;
+                btn.innerText = "Gönder";
+            }
+        }
+    </script>
+</body>
+</html>
